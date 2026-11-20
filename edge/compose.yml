@@ -29,7 +29,7 @@ services:
       - docker-api
 
   socket-proxy:
-    image: haproxy:3.2.27-alpine
+    image: haproxy:3.4.7-alpine
     user: '0:0'
     restart: unless-stopped
     read_only: true
