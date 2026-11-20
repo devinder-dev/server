@@ -45,6 +45,15 @@ On OCI, **iptables** is Ubuntu's host firewall. Cloud-init inserts web-port acce
 
 Ubuntu runs unattended security updates. Docker Engine and the Compose plugin come from Docker's APT repository. **APT** is Ubuntu's package installer. The `Signed-By` setting tells APT which downloaded public key may verify that repository's package index.
 
+Docker's **log driver** stores what containers print. The `local` driver rotates
+logs by default. It keeps up to five files of 20 MB each per container and
+compresses old files. For example, a busy API keeps about 100 MB of logs before
+compression. Cloud-init writes this setting before Docker is installed. It
+applies to new containers, so an older VM needs its containers recreated to pick
+up a changed driver.
+
+[Docker local log driver](https://docs.docker.com/engine/logging/drivers/local/)
+
 **DuckDNS** keeps a hostname such as `example.duckdns.org` pointed at the public IPv4. The **systemd timer** is Ubuntu's scheduler. It calls DuckDNS every five minutes. DuckDNS detects the public IPv4 of the outbound connection, so the updater works even when Ubuntu sees only its private IP. With no settings file it skips the update.
 
 On OCI, create the settings file as `deploy` after boot. Use an editor so the token stays out of shell history.
@@ -93,6 +102,23 @@ Expect `status: done`. See [The edge](edge.md) for the HTTP test.
 
 When go-live is authorized, the account owner configures the OCI signing key under `~/.oci/`, copies the variables example to `terraform/terraform.tfvars`, and fills in the home region, tenancy, dedicated compartment, and public key. Review `terraform -chdir=terraform plan` and check the Always Free labels and available quota before applying. **State** is Terraform's local record of resource IDs. Keep it private. A **provider lock file** records the downloaded provider version and checksums. Commit `terraform/.terraform.lock.hcl` after generating it. Create the application's S3 customer secret key separately in the OCI Console.
 
+### Network and buckets first
+
+Before creating any VMs, replace the VM map in your private `terraform.tfvars`
+with `vms = {}`. The SSH key can be omitted for this apply. From the repo root:
+
+```sh
+terraform -chdir=terraform plan
+terraform -chdir=terraform apply
+terraform -chdir=terraform output -json public_ips
+```
+
+Review the plan before applying. It should create networking and storage, with
+no compute instances or VM image lookup. Expect `{}` for public IPs. Add
+`apps` and its public key when ready to boot the VM. On a state that already has
+VMs, removing entries is a deletion plan. Use the empty map only for the first
+apply or when you intend to remove those VMs.
+
 ### Go-live checklist
 
 - After the first OCI boot and once Docker is running, run `sudo iptables -S FORWARD`. Check that Docker's forwarding jumps appear above Oracle's catch-all `REJECT` rule.
@@ -101,7 +127,7 @@ When go-live is authorized, the account owner configures the OCI signing key und
 ## What can go wrong
 
 - `Out of host capacity` means the selected availability domain has no A1 capacity. If the home region has another domain, set `availability_domain_index = 1` in `terraform.tfvars` and review the plan before retrying. Changing domains for an existing VM can replace it. If there is only one domain, retry there later.
-- `Invalid index` at image selection means no matching Arm image was found. Check the region, LTS family, and shape against the OCI image catalog.
+- `Attempt to index null value` or `Invalid index` at image selection means no matching Arm image was returned. Query Oracle platform images at tenancy scope. A child-compartment lookup returned no images in the live review. If tenancy scope still returns none, check the region, LTS family, and shape.
 - An authorization error setting bucket expiry can mean the IAM policy is still propagating. The provider account also needs permission to create the policy at the tenancy level. The policy grants the service access only in the server compartment.
 - A browser timeout on OCI while SSH works can mean a network or host firewall is blocking web traffic. Check the security list and `sudo iptables -S INPUT`, then check that Traefik is running.
 - `Permission denied (publickey)` from the Mac can mean you selected a different private key from the one whose public key was installed.

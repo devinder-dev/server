@@ -18,6 +18,20 @@ Client -> :80 (redirect) -> :443 Traefik -> edge network -> project container
 - A **certificate** proves the hostname belongs to the server during TLS setup. For local testing Traefik generates a self-signed certificate. A browser displays a trust error unless you choose to trust it.
 - **ACME** is the protocol Traefik uses to get public certificates from Let's Encrypt. With **HTTP-01**, Let's Encrypt fetches a short challenge from the public hostname on port 80. Traefik serves that challenge alongside its HTTP-to-HTTPS redirect.
 
+## Request handling at the edge
+
+Both entry points reject header names with alias characters. For example,
+`X_User` is rejected so another service cannot mistake it for `X-User`.
+The edge also rejects encoded slash, backslash, NUL, semicolon, percent,
+question mark and hash in paths. For example, `/snaps/a%2Fb` cannot arrive
+at a backend as a different route after decoding. Ordinary URL query
+parameters are separate. Snap restricts new usernames to URL-safe characters
+because they appear in routes such as `/messages/alex-2`. A name containing
+`%` would need an escape that the edge rejects. A project that needs them should test the proxy and
+backend together before changing the shared policy.
+
+[Traefik entry-point path and header settings](https://doc.traefik.io/traefik/v3.7/reference/install-configuration/entrypoints/)
+
 ## How discovery works
 
 The **Docker socket** is the file at `/var/run/docker.sock` through which Docker accepts commands. HAProxy is the **socket proxy**. It accepts only GET and HEAD on the paths Traefik needs: ping and version for startup, the container list and inspection for routing, and events for container changes. For example, a start event prompts Traefik to refresh its routes. The proxy listens on the private `docker-api` network and publishes no ports. Only the proxy mounts the socket. Its allowlist is what blocks write requests at the API level. The read-only mount alone would still allow commands over the socket. Container inspection can reveal environment variables, so the private network is an important part of this setup.

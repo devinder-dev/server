@@ -3,11 +3,14 @@ locals {
 }
 
 data "oci_identity_availability_domains" "home" {
+  count          = length(var.vms) > 0 ? 1 : 0
   compartment_id = var.tenancy_ocid
 }
 
 data "oci_core_images" "ubuntu" {
-  compartment_id           = var.compartment_ocid
+  count = length(var.vms) > 0 ? 1 : 0
+  # Platform images are listed at tenancy scope, including for VMs in a child compartment.
+  compartment_id           = var.tenancy_ocid
   operating_system         = "Canonical Ubuntu"
   operating_system_version = var.ubuntu_lts_version
   shape                    = local.shape
@@ -25,7 +28,7 @@ data "oci_core_images" "ubuntu" {
 resource "oci_core_instance" "vm" {
   for_each            = var.vms
   compartment_id      = var.compartment_ocid
-  availability_domain = data.oci_identity_availability_domains.home.availability_domains[var.availability_domain_index].name
+  availability_domain = data.oci_identity_availability_domains.home[0].availability_domains[var.availability_domain_index].name
   display_name        = "${var.name_prefix}-${each.key}"
   shape               = local.shape
 
@@ -41,7 +44,7 @@ resource "oci_core_instance" "vm" {
 
   source_details {
     source_type             = "image"
-    source_id               = data.oci_core_images.ubuntu.images[0].id
+    source_id               = data.oci_core_images.ubuntu[0].images[0].id
     boot_volume_size_in_gbs = each.value.boot_volume_gb
     boot_volume_vpus_per_gb = 10
   }

@@ -21,6 +21,9 @@ jobs:
       - run: terraform fmt -check -recursive
       - run: terraform init -backend=false -lockfile=readonly && terraform validate
         working-directory: terraform
+      - name: Test buckets-only plan and compute quota
+        run: terraform test
+        working-directory: terraform
       - name: Check local and ACME Compose configuration
         working-directory: edge
         run: |

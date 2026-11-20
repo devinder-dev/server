@@ -15,6 +15,11 @@ disable_root: true
 allow_public_ssh_keys: true
 
 write_files:
+  - path: /etc/docker/daemon.json
+    owner: root:root
+    permissions: '0644'
+    content: |
+      {"log-driver": "local"}
   - path: /etc/ssh/sshd_config.d/00-key-only.conf
     permissions: '0644'
     content: |

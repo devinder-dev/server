@@ -1,5 +1,5 @@
 output "public_ips" {
-  description = "Public IPv4 address by VM name."
+  description = "Public IPv4 address by VM name. Empty when no VMs are configured."
   value       = { for name, vm in oci_core_instance.vm : name => vm.public_ip }
 }
 
