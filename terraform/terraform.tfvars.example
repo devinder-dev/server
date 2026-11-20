@@ -1,0 +1,15 @@
+tenancy_ocid              = "ocid1.tenancy.oc1..replace"
+compartment_ocid          = "ocid1.compartment.oc1..replace"
+region                    = "eu-stockholm-1"
+availability_domain_index = 0
+name_prefix               = "shared-server"
+ssh_public_key            = "ssh-ed25519 REPLACE_WITH_PUBLIC_KEY_CONTENT"
+
+vms = {
+  apps = {
+    ocpus           = 1
+    memory_gb       = 4
+    boot_volume_gb  = 50
+    cloud_init_file = "../cloud-init.yaml"
+  }
+}

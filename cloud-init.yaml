@@ -1,0 +1,140 @@
+#cloud-config
+system_info:
+  default_user:
+    name: deploy
+    groups: [docker]
+    lock_passwd: true
+    sudo: "ALL=(ALL) NOPASSWD:ALL"
+    shell: /bin/bash
+users:
+  - default
+groups:
+  - docker
+ssh_pwauth: false
+disable_root: true
+allow_public_ssh_keys: true
+
+write_files:
+  - path: /etc/ssh/sshd_config.d/00-key-only.conf
+    permissions: '0644'
+    content: |
+      PermitRootLogin no
+      PasswordAuthentication no
+      KbdInteractiveAuthentication no
+      AuthenticationMethods publickey
+
+  - path: /etc/apt/apt.conf.d/52-shared-server-unattended
+    permissions: '0644'
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+
+  - path: /usr/local/sbin/open-edge-ports
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      set -eu
+      rules=/etc/iptables/rules.v4
+      [ -f "$rules" ] || exit 0
+
+      # Place web traffic ahead of the OCI image's catch-all INPUT reject.
+      for port in 80 443; do
+        rule="-A INPUT -p tcp -m tcp --dport $port -j ACCEPT"
+        if ! grep -Fxq -- "$rule" "$rules"; then
+          sed -i "0,/^-A INPUT /s//${rule}\n-A INPUT /" "$rules"
+        fi
+        if ! iptables -w -C INPUT -p tcp -m tcp --dport "$port" -j ACCEPT; then
+          iptables -w -I INPUT -p tcp -m tcp --dport "$port" -j ACCEPT
+        fi
+      done
+
+  - path: /usr/local/sbin/install-shared-server-docker
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      set -eu
+      apt-get update
+      apt-get install -y ca-certificates curl unattended-upgrades
+
+      install -d -m 0755 /etc/apt/keyrings
+      curl --fail --silent --show-error --retry 3 \
+        https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+      chmod 0644 /etc/apt/keyrings/docker.asc
+      . /etc/os-release
+      cat > /etc/apt/sources.list.d/docker.sources <<DOCKER_APT
+      Types: deb
+      URIs: https://download.docker.com/linux/ubuntu
+      Suites: ${VERSION_CODENAME:?}
+      Components: stable
+      Architectures: $(dpkg --print-architecture)
+      Signed-By: /etc/apt/keyrings/docker.asc
+      DOCKER_APT
+
+      apt-get update
+      apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+      systemctl enable --now docker.service unattended-upgrades.service apt-daily-upgrade.timer
+
+  - path: /usr/local/sbin/update-duckdns
+    permissions: '0755'
+    content: |
+      #!/bin/sh
+      set -eu
+
+      case "${DUCKDNS_DOMAIN:-}" in
+        ''|*[!a-z0-9-]*) exit 1 ;;
+      esac
+      case "${DUCKDNS_TOKEN:-}" in
+        ''|*[!a-zA-Z0-9-]*) exit 1 ;;
+      esac
+
+      # DuckDNS detects the source IPv4 when the ip parameter is empty.
+      # Pass the token via stdin and keep curl's diagnostics and response private.
+      if ! reply=$(printf 'url = "https://www.duckdns.org/update?domains=%s&token=%s&ip="\n' \
+        "$DUCKDNS_DOMAIN" "$DUCKDNS_TOKEN" |
+        curl -q -4 --fail --silent --max-time 30 --config - 2>/dev/null) ||
+        [ "$reply" != OK ]; then
+        printf '%s\n' 'DuckDNS update failed' >&2
+        exit 1
+      fi
+
+  - path: /etc/systemd/system/duckdns.service
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Update the DuckDNS IPv4 record
+      Wants=network-online.target
+      After=network-online.target
+      ConditionPathExists=/etc/duckdns.env
+
+      [Service]
+      Type=oneshot
+      EnvironmentFile=/etc/duckdns.env
+      ExecStart=/usr/local/sbin/update-duckdns
+      NoNewPrivileges=yes
+      ProtectSystem=strict
+      ProtectHome=yes
+      PrivateTmp=yes
+
+  - path: /etc/systemd/system/duckdns.timer
+    permissions: '0644'
+    content: |
+      [Unit]
+      Description=Refresh DuckDNS every five minutes
+
+      [Timer]
+      OnCalendar=*:0/5
+      AccuracySec=1s
+
+      [Install]
+      WantedBy=timers.target
+
+runcmd:
+  - |
+    set -eu
+    install -d -m 0755 /run/sshd
+    sshd -t
+    systemctl reload-or-restart ssh.service
+    /usr/local/sbin/open-edge-ports
+    /usr/local/sbin/install-shared-server-docker
+    systemctl daemon-reload
+    systemctl enable --now duckdns.timer

@@ -1,0 +1,50 @@
+services:
+  traefik:
+    image: traefik:v3.7.19
+    restart: unless-stopped
+    depends_on:
+      - socket-proxy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    environment:
+      TRAEFIK_API_DASHBOARD: 'false'
+      TRAEFIK_API_INSECURE: 'false'
+      TRAEFIK_ACCESSLOG: 'true'
+      TRAEFIK_ENTRYPOINTS_WEB_ADDRESS: ':8080'
+      TRAEFIK_ENTRYPOINTS_WEB_TRANSPORT_RESPONDINGTIMEOUTS_READTIMEOUT: 300s
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_TO: ':443'
+      TRAEFIK_ENTRYPOINTS_WEB_HTTP_REDIRECTIONS_ENTRYPOINT_SCHEME: https
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_ADDRESS: ':8443'
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_TRANSPORT_RESPONDINGTIMEOUTS_READTIMEOUT: 300s
+      TRAEFIK_ENTRYPOINTS_WEBSECURE_HTTP_TLS: 'true'
+      TRAEFIK_PROVIDERS_DOCKER_ENDPOINT: tcp://socket-proxy:2375
+      TRAEFIK_PROVIDERS_DOCKER_EXPOSEDBYDEFAULT: 'false'
+      TRAEFIK_PROVIDERS_DOCKER_NETWORK: edge
+    ports:
+      - '80:8080'
+      - '443:8443'
+    networks:
+      - edge
+      - docker-api
+
+  socket-proxy:
+    image: haproxy:3.2.27-alpine
+    user: '0:0'
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./socket-proxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    networks:
+      - docker-api
+
+networks:
+  edge:
+    external: true
+    name: edge
+  docker-api:
+    internal: true
