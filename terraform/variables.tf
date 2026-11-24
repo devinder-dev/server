@@ -6,6 +6,24 @@ variable "tenancy_ocid" {
 variable "compartment_ocid" {
   type        = string
   description = "OCID of an existing dedicated child compartment for the shared servers."
+
+  # Plan only reads through the tenancy, so a placeholder here would pass plan
+  # and fail first at apply. Check the shape up front.
+  validation {
+    condition     = can(regex("^ocid1\\.compartment\\.oc1\\.\\.[a-z0-9]{60}$", var.compartment_ocid))
+    error_message = "Set compartment_ocid to the dedicated compartment's OCID (ocid1.compartment.oc1.. followed by 60 lowercase letters or digits), not the example placeholder."
+  }
+}
+
+variable "photos_app_email" {
+  type        = string
+  description = "Email for the photos app user. The tenancy's identity domain requires one on every user. Keep it in the private tfvars."
+  sensitive   = true
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.photos_app_email)) && !endswith(lower(var.photos_app_email), "@example.com")
+    error_message = "Set photos_app_email to a real address you can receive mail at, not the example placeholder."
+  }
 }
 
 variable "region" {

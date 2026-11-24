@@ -6,7 +6,7 @@ This repository describes the Oracle Cloud VM that will host Snap first. Terrafo
 
 Use Oracle Always Free in the tenancy's home region. Keep the tenancy on the free tier and check the available quota in Oracle before applying, including resources outside this repository. The starting VM uses 1 of 2 OCPUs, 4 of 12 GB RAM, and 50 of 200 GB block storage. The two private buckets share the tenancy's 20 GB of Object Storage and 50,000 monthly requests. Keep those limits during the trial too.
 
-The Oracle API signing key and the S3 customer secret key are created by hand. Keep the signing key in the local OCI configuration, the customer secret key in the application environment, and Terraform state local. The repository tracks the provider lock file.
+The Oracle API signing key and the S3 customer secret key are created by hand. The S3 key belongs to the photos app user that Terraform creates, which may only create, read, and delete objects in the photos bucket. Keep the signing key in the local OCI configuration, the customer secret key in the application environment, and Terraform state local. The repository tracks the provider lock file.
 
 ## How it works
 
