@@ -5,7 +5,7 @@ The shared VM needs repeatable cloud resources and a predictable first boot. Ter
 ```text
 Mac -> Terraform -> OCI compartment
                      |-- VCN -> public subnet -> apps VM -> cloud-init
-                     |-- photos bucket
+                     |-- photos bucket <- photos app user (S3 key) -> group -> policy
                      `-- backups bucket
 
 Browser -> internet gateway -> OCI security list -> Ubuntu / Docker -> Traefik
@@ -19,6 +19,7 @@ Browser -> internet gateway -> OCI security list -> Ubuntu / Docker -> Traefik
 - The **security list** is the subnet's cloud firewall. It accepts new inbound TCP connections on 22 (SSH), 80 (HTTP), and 443 (HTTPS). ICMP type 3/code 4 tells a sender a packet is too large and needs to be split into smaller packets. Stateful rules allow replies to permitted traffic.
 - An **availability domain** is a group of data centers in a region. `availability_domain_index = 0` selects the first one Oracle returns. Use `1` for the second if the home region has one. Terraform checks the index against the list Oracle returns. The **image** is a stock disk template, such as a Canonical Ubuntu 24.04 LTS Arm build. Terraform looks up the newest standard image in that family for the A1 shape at plan time. Existing VMs keep their original image when the catalog changes.
 - A **bucket** is a container for files in Object Storage. **Lifecycle rules** expire photos after two days and previous backup versions after 14 days. **Versioning** keeps the old contents when the same backup key is overwritten. A fresh backup under a new key stays current, so these rules alone do not cap backup size. The **namespace** identifies the tenancy in the S3-compatible URL. Use path-style addressing and the OCI region in the S3 client. The lifecycle service gets permission to delete in the dedicated compartment.
+- The **photos app user** (`shared-server-photos-app`) is an account for the application, not a person. An app's **S3 customer secret key** (an access key ID and a secret, like an AWS access key) belongs to a user and can do whatever that user may do. So this user can't log in to the Console or use API keys, auth tokens, or SMTP credentials. Terraform's capabilities resource can't switch off database or OAuth2 client credentials. Only an administrator could create those, and the S3 key reaches Object Storage only. It is in a **group** of the same name, and one **policy** lets that group create, read, and delete objects in the photos bucket and nothing else. Photo names are new random IDs, so overwrite isn't granted. HEAD needs only read. A leaked key can't reach the backups bucket or any other resource. The identity domain requires an email on every user. It goes in `photos_app_email` in the private `terraform.tfvars`. Terraform creates the user but never its key, because a key made by Terraform would be stored in plain text in the state file.
 
 ## The free limits
 
@@ -100,7 +101,7 @@ rm "$rendered"
 
 Expect `status: done`. See [The edge](edge.md) for the HTTP test.
 
-When go-live is authorized, the account owner configures the OCI signing key under `~/.oci/`, copies the variables example to `terraform/terraform.tfvars`, and fills in the home region, tenancy, dedicated compartment, and public key. Review `terraform -chdir=terraform plan` and check the Always Free labels and available quota before applying. **State** is Terraform's local record of resource IDs. Keep it private. A **provider lock file** records the downloaded provider version and checksums. Commit `terraform/.terraform.lock.hcl` after generating it. Create the application's S3 customer secret key separately in the OCI Console.
+When go-live is authorized, the account owner configures the OCI signing key under `~/.oci/`, copies the variables example to `terraform/terraform.tfvars`, and fills in the home region, tenancy, dedicated compartment, and public key. Review `terraform -chdir=terraform plan` and check the Always Free labels and available quota before applying. **State** is Terraform's local record of resource IDs. Keep it private. A **provider lock file** records the downloaded provider version and checksums. Commit `terraform/.terraform.lock.hcl` after generating it. Create the application's S3 customer secret key in the OCI Console for the user named by `terraform -chdir=terraform output photos_app_user`, never for your own user. Oracle shows the secret once. Save it straight into the application's environment file.
 
 ### Network and buckets first
 
@@ -129,6 +130,10 @@ apply or when you intend to remove those VMs.
 - `Out of host capacity` means the selected availability domain has no A1 capacity. If the home region has another domain, set `availability_domain_index = 1` in `terraform.tfvars` and review the plan before retrying. Changing domains for an existing VM can replace it. If there is only one domain, retry there later.
 - `Attempt to index null value` or `Invalid index` at image selection means no matching Arm image was returned. Query Oracle platform images at tenancy scope. A child-compartment lookup returned no images in the live review. If tenancy scope still returns none, check the region, LTS family, and shape.
 - An authorization error setting bucket expiry can mean the IAM policy is still propagating. The provider account also needs permission to create the policy at the tenancy level. The policy grants the service access only in the server compartment.
+- `400 InvalidParameter` naming `ocid1.compartment.oc1..replace`, or a plan that stops at `compartment_ocid`, means the private `terraform.tfvars` still has the example placeholder. Copy the dedicated compartment's OCID from Oracle.
+- `SignatureDoesNotMatch` with "the secret key required to complete authentication could not be found" in the first seconds after generating a customer secret key means Oracle hasn't spread the new key yet. In the live test, the first call failed and later calls with the same key passed. Wait a minute and retry. If it persists, check that the whole secret was saved.
+- Oracle answers `404 NoSuchBucket` ("does not exist ... or you are not authorized") when the key lacks permission, so it doesn't reveal which buckets exist. The photos app's key gets that answer for the backups bucket and for listing.
+- An S3 `403` with the photos app's key can mean the new policy is still propagating, so retry after a minute. It can also mean an operation needs a permission the policy doesn't grant. Check the bucket name in the policy and the permission list in `app-access.tf`.
 - A browser timeout on OCI while SSH works can mean a network or host firewall is blocking web traffic. Check the security list and `sudo iptables -S INPUT`, then check that Traefik is running.
 - `Permission denied (publickey)` from the Mac can mean you selected a different private key from the one whose public key was installed.
 - A stale DuckDNS record can mean the settings file is missing or the token was rejected. Run `sudo journalctl -u duckdns.service -n 10`. If the token is rejected, the updater logs only a generic failure.
