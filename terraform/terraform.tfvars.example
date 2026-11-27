@@ -5,6 +5,7 @@ availability_domain_index = 0
 name_prefix               = "shared-server"
 ssh_public_key            = "ssh-ed25519 REPLACE_WITH_PUBLIC_KEY_CONTENT"
 photos_app_email          = "replace+photos-app@example.com"
+backups_app_email          = "replace+backups-app@example.com"
 
 vms = {
   apps = {
