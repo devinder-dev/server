@@ -11,10 +11,11 @@ mock_provider "oci" {
 }
 
 variables {
-  tenancy_ocid     = "ocid1.tenancy.oc1..zzt"
-  compartment_ocid = "ocid1.compartment.oc1..zzt000000000000000000000000000000000000000000000000000000000"
-  region           = "eu-stockholm-1"
-  photos_app_email = "zzt+photos-app@zzt.test"
+  tenancy_ocid      = "ocid1.tenancy.oc1..zzt"
+  compartment_ocid  = "ocid1.compartment.oc1..zzt000000000000000000000000000000000000000000000000000000000"
+  region            = "eu-stockholm-1"
+  photos_app_email  = "zzt+photos-app@zzt.test"
+  backups_app_email = "zzt+backups-app@zzt.test"
 }
 
 run "buckets_only" {

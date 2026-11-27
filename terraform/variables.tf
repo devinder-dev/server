@@ -26,6 +26,17 @@ variable "photos_app_email" {
   }
 }
 
+variable "backups_app_email" {
+  type        = string
+  description = "Email for the backups app user. The tenancy's identity domain requires one on every user. Keep it in the private tfvars."
+  sensitive   = true
+
+  validation {
+    condition     = can(regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$", var.backups_app_email)) && !endswith(lower(var.backups_app_email), "@example.com")
+    error_message = "Set backups_app_email to a real address you can receive mail at, not the example placeholder."
+  }
+}
+
 variable "region" {
   type        = string
   description = "The tenancy's commercial OCI home region."

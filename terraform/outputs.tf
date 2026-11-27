@@ -13,6 +13,11 @@ output "photos_app_user" {
   value       = oci_identity_user.photos_app.name
 }
 
+output "backups_app_user" {
+  description = "The user that owns the backups bucket's S3 customer secret key. Create the key for this user in the Console."
+  value       = oci_identity_user.backups_app.name
+}
+
 output "bucket_names" {
   description = "Object Storage bucket names by purpose."
   value       = { for purpose, bucket in oci_objectstorage_bucket.server : purpose => bucket.name }
